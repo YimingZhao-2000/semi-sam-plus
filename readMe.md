@@ -1,151 +1,252 @@
+# Semi-SAM+ 3D Medical Image Segmentation Pipeline
 
----
+A comprehensive semi-supervised learning pipeline for 3D medical image segmentation using MedSAM ViT and MedSAM2 models with **online model loading**.
 
-````markdown
-# 模型下载与安装指南（Linux）
+## 🚀 Features
 
-> **硬件假设**：单卡 **NVIDIA TITAN V 12 GB**  
-> **适用对象**：想要在本地或服务器上批量下载 MedSAM 系列模型（`MedSAM2`、`medsam-vit-base` 等）并用于 *Semi-SAM+* 训练 / 推理的研究与工程人员。
+- **Student Model**: Custom SlicingSAM3D with MedSAM ViT as frozen encoder
+- **Teacher Models**: MedSAM2 (3D) and MedSAM ViT (2D) for pseudo-label generation
+- **Semi-supervised Training**: Efficient training with labeled and unlabeled data
+- **Online Model Loading**: Models loaded directly from HuggingFace Hub
+- **Robust Fallback**: Automatic fallback to local models if online loading fails
+- **Flexible Architecture**: Easy to extend with new models
 
----
+## 📋 Requirements
 
-## 目录
-1. [准备工作](#准备工作)  
-2. [两种安装方式](#两种安装方式)  
-   - 2.1 Python 脚本  
-   - 2.2 Bash 脚本  
-3. [跳过 LFS 加速安装](#跳过-lfs-加速安装)  
-4. [后期拉取 LFS 大文件](#后期拉取-lfs-大文件)  
-5. [目录结构与文件说明](#目录结构与文件说明)  
-6. [常见问题 Troubleshooting](#常见问题-troubleshooting)  
-7. [安装成功示例输出](#安装成功示例输出)  
+### System Requirements
+- Python 3.8+
+- CUDA-compatible GPU (recommended)
+- Internet connection for model downloading
 
----
-
-## 准备工作
-
+### Dependencies
 ```bash
-# 1. 安装 git-lfs
-# ——Ubuntu / Debian——
-sudo apt-get update && sudo apt-get install git-lfs
-# ——CentOS / RHEL——
-# sudo yum install git-lfs
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+huggingface_hub>=0.15.0
 
-# 2. 初始化 git-lfs
-git lfs install
-````
+# Medical image processing
+torchio>=0.18.0
+nibabel>=5.0.0
+SimpleITK>=2.0.0
 
-> **说明**：`git-lfs` 用于下载仓库中的大文件（权重、检查点等），若缺少会出现 “pointer file” 错误。
+# Scientific computing
+numpy>=1.21.0
+scipy>=1.9.0
+scikit-learn>=1.1.0
 
----
+# Utilities
+tqdm>=4.64.0
+pillow>=9.0.0
+opencv-python>=4.6.0
+```
 
-## 两种安装方式
+## 🛠️ Installation
 
-> **默认下载路径**：`./yiming_models_hgf/`
-
-### 2.1 使用 Python 脚本
-
+### 1. Clone the Repository
 ```bash
-# 先赋予可执行权限
-chmod +x install_models.py
-
-# A. 完整安装（推荐训练用）
-python3 install_models.py
-
-# B. 跳过 LFS 大文件（先搭环境，用时再下载）
-python3 install_models.py --skip-lfs
+git clone https://github.com/YimingZhao-2000/semi-sam-plus.git
+cd semi-sam-plus
 ```
 
-### 2.2 使用 Bash 脚本
-
+### 2. Install Dependencies (Recommended)
 ```bash
-chmod +x install_models.sh
-
-# A. 完整安装
-./install_models.sh
-
-# B. 跳过 LFS
-./install_models.sh --skip-lfs
+# Install all dependencies and test online model loading
+python install_dependencies.py
 ```
 
----
-
-## 跳过 LFS 加速安装
-
-`--skip-lfs` 仅拉取小文件（代码、config），大大加快首次 clone 速度；**训练前** 需手动拉取权重，方法见下一节。
-
----
-
-## 后期拉取 LFS 大文件
-
+### 3. Manual Installation (Alternative)
 ```bash
-cd yiming_models_hgf/MedSAM2
-git lfs pull              # 拉取当前仓库所有大文件
+# Create conda environment
+conda create -n semisam python=3.10 -y
+conda activate semisam
 
-cd ../medsam-vit-base
-git lfs pull
+# Install PyTorch with CUDA
+conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
+
+# Install other dependencies
+conda install numpy scipy matplotlib scikit-learn tqdm pillow pandas -y
+conda install -c conda-forge simpleitk nibabel torchio opencv huggingface_hub -y
+conda install -c huggingface transformers -y
+
+# Install MedSAM2 package
+pip install git+https://github.com/bowang-lab/MedSAM2.git
 ```
 
-若仓库为私有或 gated，需在 `git lfs pull` 时输入 Hugging Face **Access Token**，或先配置 SSH / HTTPS + Token（详见 Troubleshooting）。
+### 4. Verify Installation
+```bash
+python test_model_loading.py
+```
+
+## 🏗️ Architecture
+
+### Student Model: SlicingSAM3D
+```
+Input: [B, 1, D, H, W] 3D volume
+├── Slice along D dimension → [B, 1, H, W] 2D slices
+├── MedSAM ViT Encoder → [B, 256, H//16, W//16] features per slice
+├── Stack features → [B, 256, D, H//16, W//16] 3D features
+└── 3D Decoder (4 layers) → [B, 1, D, H, W] segmentation mask
+```
+
+### Teacher Models
+- **MedSAM ViT**: 2D SAM model for slice-by-slice processing
+- **MedSAM2**: 3D model for volume-level processing with prompts
+
+## 📖 Usage
+
+### Basic Training
+```python
+from config import Config
+from model import get_student_model, get_teacher_model
+from train import train_semi
+
+# Load configuration
+config = Config()
+config.data_path = 'path/to/your/data'
+config.batch_size = 4
+
+# Load models (automatically from HuggingFace Hub)
+student = get_student_model(config)
+teacher = get_teacher_model(config, 'medsam2')
+
+# Train
+train_semi(config, student, teacher, optimizer, train_loader, unlabeled_loader, device)
+```
+
+### Model Loading
+```python
+from model import get_medsam_vit_model, get_medsam2_model
+
+# Load MedSAM ViT (from HuggingFace Hub)
+processor, model = get_medsam_vit_model(device='cuda')
+
+# Load MedSAM2 (from HuggingFace Hub)
+model = get_medsam2_model(device='cuda')
+```
+
+### Direct HuggingFace Loading
+```python
+# Load model directly from HuggingFace Hub
+from transformers import AutoProcessor, AutoModelForMaskGeneration
+
+processor = AutoProcessor.from_pretrained("wanglab/medsam-vit-base")
+model = AutoModelForMaskGeneration.from_pretrained("wanglab/medsam-vit-base")
+```
+
+## ⚙️ Configuration
+
+### Model Selection
+```python
+# In config.py
+student_model = 'slicing-sam3d'  # Custom 3D model
+teacher_models = 'medsam2'       # or 'medsam-vit'
+
+# Model paths (fallback only)
+medsam_vit_path = './yiming_models_hgf/medsam-vit-base'
+medsam2_path = './yiming_models_hgf/MedSAM2'
+```
+
+### Training Phases
+1. **Warmup**: Train student model on labeled data only
+2. **Semi-supervised**: Use teacher models for pseudo-label generation
+3. **Fine-tune**: Final training on all data
+
+## 📁 Project Structure
+
+```
+semi-sam-plus/
+├── model.py                 # Model definitions and loading
+├── config.py                # Configuration settings
+├── train.py                 # Training loops
+├── utils.py                 # Utility functions
+├── data.py                  # Data loading utilities
+├── install_dependencies.py  # Dependency installation script
+├── install_models.py        # Local model installation (fallback)
+├── install_models.sh        # Bash installation script
+├── test_model_loading.py    # Setup verification
+├── PIPELINE_SETUP.md        # Detailed setup guide
+├── DOWNLOAD_MODELS.md       # Model download documentation
+├── .gitignore              # Git ignore rules
+└── README.md               # This file
+```
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Internet Connection Issues**
+   ```
+   ConnectionError: Failed to download model
+   ```
+   **Solution**: Check internet connection or use local model installation
+
+2. **Missing Dependencies**
+   ```
+   ImportError: No module named 'medsam2'
+   ```
+   **Solution**: `pip install git+https://github.com/bowang-lab/MedSAM2.git`
+
+3. **CUDA Out of Memory**
+   ```
+   RuntimeError: CUDA out of memory
+   ```
+   **Solution**: Reduce batch size or use CPU for testing
+
+4. **HuggingFace Hub API Issues**
+   ```
+   TypeError: unexpected keyword argument 'local_dir'
+   ```
+   **Solution**: Update huggingface_hub: `pip install --upgrade huggingface_hub`
+
+### Testing
+Run the test script to diagnose issues:
+```bash
+python test_model_loading.py
+```
+
+### Fallback to Local Models
+If online loading fails, you can still use local models:
+```bash
+# Install models locally
+python install_models.py
+
+# The pipeline will automatically fallback to local models
+```
+
+## 📚 Documentation
+
+- [Pipeline Setup Guide](PIPELINE_SETUP.md) - Detailed setup instructions
+- [Model Download Guide](DOWNLOAD_MODELS.md) - Local model installation guide
+- [Student Model Building](student_model_building.md) - Student model details
+- [Teacher Model Building](teacher_model_buidling.md) - Teacher model details
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [MedSAM2](https://github.com/bowang-lab/MedSAM2) - 3D medical image segmentation model
+- [MedSAM ViT](https://huggingface.co/wanglab/medsam-vit-base) - 2D medical image segmentation model
+- [SAM2](https://github.com/facebookresearch/sam2) - Segment Anything Model 2
+
+## 📞 Support
+
+If you encounter any issues:
+1. Check the troubleshooting section above
+2. Review the documentation files
+3. Open an issue on GitHub with detailed error information
 
 ---
 
-## 目录结构与文件说明
-
-```
-yiming_models_hgf/
-├── MedSAM2/              # 600 M 参数 - 记忆注意力版
-│   ├── config.json
-│   ├── pytorch_model.bin  # ~1 GB（LFS）
-│   └── ...
-└── medsam-vit-base/
-    ├── config.json
-    ├── pytorch_model.bin  # ~340 MB（LFS）
-    └── ...
-```
-
-> `config.json` / `pytorch_model.bin` 即可直接被 `torch.load` / `transformers.AutoModel.from_pretrained` 调用。
-
----
-
-## 常见问题 Troubleshooting
-
-| 现象                                    | 解决办法                                                                     |
-| ------------------------------------- | ------------------------------------------------------------------------ |
-| **`git: 'lfs' is not a git command`** | `sudo apt-get install git-lfs` 然后 `git lfs install`                      |
-| **clone 卡在 \*.psd / \*.bin pointer**  | 忘记装 `git-lfs` 或使用了 `--skip-lfs`；进入仓库 `git lfs pull`                      |
-| **Permission denied (publickey)**     | 改用 **HTTPS** URL + Access Token；或正确配置服务器 SSH key 并在 Hugging Face 账户里新增公钥 |
-| **HTTP 403 / 401**                    | 仓库为私有 / gated，需要 Access Token；`git lfs pull` 时输入 token 作为密码              |
-| **磁盘空间不足**                            | 删掉中间 `.git` 临时文件或只保留需要的 checkpoint；亦可挂载大容量盘                              |
-
----
-
-## 安装成功示例输出<a id="安装成功示例输出"></a>
-
-```text
-MedSAM2 and MedSAM ViT Installation Script
-==================================================
-[INFO] Checking git-lfs installation...
-[SUCCESS] git-lfs is installed
-
-==================================================
-Installing MedSAM2
-==================================================
-[INFO] Cloning MedSAM2 to yiming_models_hgf/MedSAM2...
-[SUCCESS] MedSAM2 cloned with all files
-
-==================================================
-Installing MedSAM ViT Base
-==================================================
-[INFO] Cloning MedSAM ViT Base to yiming_models_hgf/medsam-vit-base...
-[SUCCESS] MedSAM ViT Base cloned with all files
-
-==================================================
-INSTALLATION SUMMARY
-==================================================
-Base directory: /path/to/your/project/yiming_models_hgf
-MedSAM2:        yiming_models_hgf/MedSAM2
-MedSAM ViT Base: yiming_models_hgf/medsam-vit-base
-
-[SUCCESS] Installation complete!
-```
+**Note**: The pipeline now prioritizes online model loading from HuggingFace Hub for easier deployment. Local model installation is available as a fallback option.

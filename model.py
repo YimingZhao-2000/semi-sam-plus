@@ -221,39 +221,54 @@ def clone_repo_with_lfs(repo_url, local_path, skip_lfs=False):
 # =====================
 def get_medsam_vit_model(device='cuda', repo_path=None, skip_lfs=False):
     """
-    Load MedSAM ViT model and processor from local yiming_models_hgf directory.
+    Load MedSAM ViT model and processor from HuggingFace Hub.
+    Falls back to local path if online loading fails.
     Args:
         device: Device to load model on
         repo_path: Local path to model (if None, uses default yiming_models_hgf path)
         skip_lfs: If True, skip downloading large files initially (for cloning)
     """
-    if repo_path is None:
-        repo_path = './yiming_models_hgf/medsam-vit-base'
+    print("Loading MedSAM ViT from HuggingFace Hub...")
     
-    # Check if local path exists
-    if not os.path.exists(repo_path):
-        raise FileNotFoundError(f"MedSAM ViT model not found at {repo_path}. "
-                               "Please run the installation script first: python install_models.py")
-    
-    # Verify model files exist
-    required_files = ['config.json', 'pytorch_model.bin', 'tokenizer.json']
-    missing_files = []
-    for file in required_files:
-        file_path = os.path.join(repo_path, file)
-        if not os.path.exists(file_path):
-            missing_files.append(file_path)
-    
-    if missing_files:
-        raise FileNotFoundError(f"Missing MedSAM ViT model files: {missing_files}. "
-                               "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
-    
-    print(f"Loading MedSAM ViT from: {repo_path}")
-    
-    # Load model and processor from local path
-    processor = AutoProcessor.from_pretrained(repo_path)
-    model = AutoModelForMaskGeneration.from_pretrained(repo_path).to(device)
-    
-    return processor, model
+    try:
+        # Try to load directly from HuggingFace Hub
+        processor = AutoProcessor.from_pretrained("wanglab/medsam-vit-base")
+        model = AutoModelForMaskGeneration.from_pretrained("wanglab/medsam-vit-base").to(device)
+        print("✓ MedSAM ViT loaded successfully from HuggingFace Hub")
+        return processor, model
+        
+    except Exception as e:
+        print(f"⚠️  Online loading failed: {e}")
+        print("Falling back to local model...")
+        
+        # Fallback to local path
+        if repo_path is None:
+            repo_path = './yiming_models_hgf/medsam-vit-base'
+        
+        # Check if local path exists
+        if not os.path.exists(repo_path):
+            raise FileNotFoundError(f"MedSAM ViT model not found at {repo_path}. "
+                                   "Please run the installation script first: python install_models.py")
+        
+        # Verify model files exist
+        required_files = ['config.json', 'pytorch_model.bin', 'tokenizer.json']
+        missing_files = []
+        for file in required_files:
+            file_path = os.path.join(repo_path, file)
+            if not os.path.exists(file_path):
+                missing_files.append(file_path)
+        
+        if missing_files:
+            raise FileNotFoundError(f"Missing MedSAM ViT model files: {missing_files}. "
+                                   "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
+        
+        print(f"Loading MedSAM ViT from local path: {repo_path}")
+        
+        # Load model and processor from local path
+        processor = AutoProcessor.from_pretrained(repo_path)
+        model = AutoModelForMaskGeneration.from_pretrained(repo_path).to(device)
+        
+        return processor, model
 
 def medsam_vit_inference(processor, model, image):
     """
@@ -274,54 +289,96 @@ def medsam_vit_inference(processor, model, image):
 # =====================
 def get_medsam2_model(device='cuda', repo_path=None, skip_lfs=False):
     """
-    Load MedSAM2 model from local yiming_models_hgf directory.
+    Load MedSAM2 model from HuggingFace Hub or local path.
     Args:
         device: Device to load model on
         repo_path: Local path to model (if None, uses default yiming_models_hgf path)
         skip_lfs: If True, skip downloading large files initially (for cloning)
     """
-    if repo_path is None:
-        repo_path = './yiming_models_hgf/MedSAM2'
+    print("Loading MedSAM2 from HuggingFace Hub...")
     
-    # Check if local path exists
-    if not os.path.exists(repo_path):
-        raise FileNotFoundError(f"MedSAM2 model not found at {repo_path}. "
-                               "Please run the installation script first: python install_models.py")
-    
-    # Path to the latest checkpoint
-    ckpt_path = os.path.join(repo_path, 'MedSAM2_latest.pt')
-    
-    if not os.path.exists(ckpt_path):
-        raise FileNotFoundError(f"MedSAM2 checkpoint not found at {ckpt_path}. "
-                               "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
-    
-    print(f"Loading MedSAM2 from: {ckpt_path}")
-    
-    # Try to import MedSAM2 from installed package
     try:
-        from medsam2 import MedSAM2
-        print("MedSAM2 package found, loading model...")
+        # Try to load directly from HuggingFace Hub
+        from huggingface_hub import hf_hub_download
+        import tempfile
         
-        # Initialize model (you may need to adjust parameters based on MedSAM2 API)
-        model = MedSAM2()
-        
-        # Load checkpoint
-        checkpoint = torch.load(ckpt_path, map_location=device)
-        model.load_state_dict(checkpoint)
-        model.to(device)
-        model.eval()
-        
-        return model
-        
-    except ImportError:
-        print("MedSAM2 package not installed. Please install it first:")
-        print("pip install git+https://github.com/bowang-lab/MedSAM2.git")
-        raise ImportError("MedSAM2 package is required. Please install it using the command above.")
-    
+        # Download the latest checkpoint to a temporary location
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ckpt_path = hf_hub_download(
+                repo_id="wanglab/MedSAM2",
+                filename="MedSAM2_latest.pt",
+                cache_dir=temp_dir
+            )
+            
+            # Try to import MedSAM2 from installed package
+            try:
+                from medsam2 import MedSAM2
+                print("MedSAM2 package found, loading model...")
+                
+                # Initialize model
+                model = MedSAM2()
+                
+                # Load checkpoint
+                checkpoint = torch.load(ckpt_path, map_location=device)
+                model.load_state_dict(checkpoint)
+                model.to(device)
+                model.eval()
+                
+                print("✓ MedSAM2 loaded successfully from HuggingFace Hub")
+                return model
+                
+            except ImportError:
+                print("MedSAM2 package not installed. Please install it first:")
+                print("pip install git+https://github.com/bowang-lab/MedSAM2.git")
+                raise ImportError("MedSAM2 package is required. Please install it using the command above.")
+                
     except Exception as e:
-        print(f"Error loading MedSAM2 model: {e}")
-        print("Please ensure MedSAM2 is properly installed and the checkpoint is valid.")
-        raise
+        print(f"⚠️  Online loading failed: {e}")
+        print("Falling back to local model...")
+        
+        # Fallback to local path
+        if repo_path is None:
+            repo_path = './yiming_models_hgf/MedSAM2'
+        
+        # Check if local path exists
+        if not os.path.exists(repo_path):
+            raise FileNotFoundError(f"MedSAM2 model not found at {repo_path}. "
+                                   "Please run the installation script first: python install_models.py")
+        
+        # Path to the latest checkpoint
+        ckpt_path = os.path.join(repo_path, 'MedSAM2_latest.pt')
+        
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(f"MedSAM2 checkpoint not found at {ckpt_path}. "
+                                   "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
+        
+        print(f"Loading MedSAM2 from local path: {ckpt_path}")
+        
+        # Try to import MedSAM2 from installed package
+        try:
+            from medsam2 import MedSAM2
+            print("MedSAM2 package found, loading model...")
+            
+            # Initialize model
+            model = MedSAM2()
+            
+            # Load checkpoint
+            checkpoint = torch.load(ckpt_path, map_location=device)
+            model.load_state_dict(checkpoint)
+            model.to(device)
+            model.eval()
+            
+            return model
+            
+        except ImportError:
+            print("MedSAM2 package not installed. Please install it first:")
+            print("pip install git+https://github.com/bowang-lab/MedSAM2.git")
+            raise ImportError("MedSAM2 package is required. Please install it using the command above.")
+        
+        except Exception as e:
+            print(f"Error loading MedSAM2 model: {e}")
+            print("Please ensure MedSAM2 is properly installed and the checkpoint is valid.")
+            raise
 
 # =====================
 # Model Definitions
