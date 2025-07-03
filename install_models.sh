@@ -62,17 +62,31 @@ download_medsam_vit() {
     
     local_dir="yiming_models_hgf/medsam-vit-base"
     
-    # Use Python script to download
+    # Use Python script to download with version compatibility
     python3 -c "
 import os
+import huggingface_hub
 from huggingface_hub import snapshot_download
 
 try:
-    downloaded_path = snapshot_download(
-        repo_id='wanglab/medsam-vit-base',
-        local_dir='$local_dir',
-        local_dir_use_symlinks=False
-    )
+    hf_version = huggingface_hub.__version__
+    print(f'Using huggingface_hub version: {hf_version}')
+    
+    # Try with local_dir first (newer versions)
+    try:
+        downloaded_path = snapshot_download(
+            repo_id='wanglab/medsam-vit-base',
+            local_dir='$local_dir',
+            local_dir_use_symlinks=False
+        )
+    except TypeError:
+        # Fallback to cache_dir (older versions)
+        print('Using cache_dir for older huggingface_hub version')
+        downloaded_path = snapshot_download(
+            repo_id='wanglab/medsam-vit-base',
+            cache_dir='$local_dir'
+        )
+    
     print(f'✓ MedSAM ViT downloaded to: {downloaded_path}')
 except Exception as e:
     print(f'✗ Failed to download MedSAM ViT: {e}')
@@ -94,9 +108,10 @@ download_medsam2() {
     local_dir="yiming_models_hgf/MedSAM2"
     mkdir -p "$local_dir"
     
-    # Use Python script to download individual files
+    # Use Python script to download individual files with version compatibility
     python3 -c "
 import os
+import huggingface_hub
 from huggingface_hub import hf_hub_download
 
 local_dir = '$local_dir'
@@ -110,17 +125,30 @@ checkpoint_files = [
 additional_files = ['README.md', 'config.json']
 
 downloaded_count = 0
+hf_version = huggingface_hub.__version__
+print(f'Using huggingface_hub version: {hf_version}')
 
 # Download checkpoint files
 for filename in checkpoint_files:
     try:
         print(f'  Downloading {filename}...')
-        file_path = hf_hub_download(
-            repo_id='wanglab/MedSAM2',
-            filename=filename,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False
-        )
+        # Try with local_dir first (newer versions)
+        try:
+            file_path = hf_hub_download(
+                repo_id='wanglab/MedSAM2',
+                filename=filename,
+                local_dir=local_dir,
+                local_dir_use_symlinks=False
+            )
+        except TypeError:
+            # Fallback to cache_dir (older versions)
+            print(f'    Using cache_dir for {filename}')
+            file_path = hf_hub_download(
+                repo_id='wanglab/MedSAM2',
+                filename=filename,
+                cache_dir=local_dir
+            )
+        
         downloaded_count += 1
         print(f'    ✓ {filename} downloaded')
     except Exception as e:
@@ -130,12 +158,23 @@ for filename in checkpoint_files:
 for filename in additional_files:
     try:
         print(f'  Downloading {filename}...')
-        file_path = hf_hub_download(
-            repo_id='wanglab/MedSAM2',
-            filename=filename,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False
-        )
+        # Try with local_dir first (newer versions)
+        try:
+            file_path = hf_hub_download(
+                repo_id='wanglab/MedSAM2',
+                filename=filename,
+                local_dir=local_dir,
+                local_dir_use_symlinks=False
+            )
+        except TypeError:
+            # Fallback to cache_dir (older versions)
+            print(f'    Using cache_dir for {filename}')
+            file_path = hf_hub_download(
+                repo_id='wanglab/MedSAM2',
+                filename=filename,
+                cache_dir=local_dir
+            )
+        
         downloaded_count += 1
         print(f'    ✓ {filename} downloaded')
     except Exception as e:
