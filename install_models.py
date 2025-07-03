@@ -1,70 +1,64 @@
 #!/usr/bin/env python3
 """
 MedSAM2 and MedSAM ViT Installation Script
-Updated to use correct huggingface_hub API with backward compatibility
+Updated to use huggingface-cli for reliable model downloading
 """
 
 import os
 import sys
 import subprocess
 from pathlib import Path
-from huggingface_hub import hf_hub_download, snapshot_download
 
-def check_git_lfs():
-    """Check if git-lfs is installed."""
+def check_huggingface_cli():
+    """Check if huggingface-cli is installed."""
     try:
-        subprocess.run(['git', 'lfs', 'version'], check=True, capture_output=True)
-        print("✓ git-lfs is installed")
+        subprocess.run(['huggingface-cli', '--version'], check=True, capture_output=True)
+        print("✓ huggingface-cli is installed")
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("✗ git-lfs is not installed")
-        print("Please install git-lfs first:")
-        print("  Ubuntu/Debian: sudo apt-get install git-lfs")
-        print("  CentOS/RHEL: sudo yum install git-lfs")
-        print("  macOS: brew install git-lfs")
-        print("Then run: git lfs install")
-        return False
+        print("✗ huggingface-cli is not installed")
+        print("Installing huggingface-cli...")
+        try:
+            subprocess.run(['pip', 'install', 'huggingface_hub'], check=True)
+            print("✓ huggingface-cli installed successfully")
+            return True
+        except subprocess.CalledProcessError:
+            print("✗ Failed to install huggingface-cli")
+            return False
 
 def download_medsam_vit():
-    """Download MedSAM ViT using snapshot_download."""
+    """Download MedSAM ViT using huggingface-cli."""
     print("\nDownloading MedSAM ViT Base...")
     
     local_dir = "yiming_models_hgf/medsam-vit-base"
+    os.makedirs(local_dir, exist_ok=True)
     
     try:
-        # Use snapshot_download to get the entire repository
-        # Check huggingface_hub version for compatibility
-        import huggingface_hub
-        hf_version = huggingface_hub.__version__
-        print(f"Using huggingface_hub version: {hf_version}")
+        # Use huggingface-cli to download the repository
+        cmd = [
+            'huggingface-cli', 'download',
+            'wanglab/medsam-vit-base',
+            '--local-dir', local_dir,
+            '--local-dir-use-symlinks', 'False'
+        ]
         
-        # For older versions, use cache_dir instead of local_dir
-        if hasattr(snapshot_download, '__call__'):
-            try:
-                # Try with local_dir first (newer versions)
-                downloaded_path = snapshot_download(
-                    repo_id="wanglab/medsam-vit-base",
-                    local_dir=local_dir,
-                    local_dir_use_symlinks=False
-                )
-            except TypeError:
-                # Fallback to cache_dir (older versions)
-                print("Using cache_dir for older huggingface_hub version")
-                downloaded_path = snapshot_download(
-                    repo_id="wanglab/medsam-vit-base",
-                    cache_dir=local_dir
-                )
-        else:
-            raise ImportError("snapshot_download not available")
-            
-        print(f"✓ MedSAM ViT downloaded to: {downloaded_path}")
-        return downloaded_path
-    except Exception as e:
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        
+        if result.stdout:
+            print(f"Output: {result.stdout}")
+        
+        print(f"✓ MedSAM ViT downloaded to: {local_dir}")
+        return local_dir
+        
+    except subprocess.CalledProcessError as e:
         print(f"✗ Failed to download MedSAM ViT: {e}")
+        if e.stderr:
+            print(f"Error: {e.stderr}")
         return None
 
 def download_medsam2():
-    """Download MedSAM2 using hf_hub_download for individual files."""
+    """Download MedSAM2 using huggingface-cli."""
     print("\nDownloading MedSAM2...")
     
     local_dir = "yiming_models_hgf/MedSAM2"
@@ -88,62 +82,47 @@ def download_medsam2():
     downloaded_files = []
     
     try:
-        # Check huggingface_hub version
-        import huggingface_hub
-        hf_version = huggingface_hub.__version__
-        print(f"Using huggingface_hub version: {hf_version}")
-        
         # Download checkpoint files
         for filename in checkpoint_files:
             print(f"  Downloading {filename}...")
             try:
-                # Try with local_dir first (newer versions)
-                try:
-                    file_path = hf_hub_download(
-                        repo_id="wanglab/MedSAM2",
-                        filename=filename,
-                        local_dir=local_dir,
-                        local_dir_use_symlinks=False
-                    )
-                except TypeError:
-                    # Fallback to cache_dir (older versions)
-                    print(f"    Using cache_dir for {filename}")
-                    file_path = hf_hub_download(
-                        repo_id="wanglab/MedSAM2",
-                        filename=filename,
-                        cache_dir=local_dir
-                    )
+                cmd = [
+                    'huggingface-cli', 'download',
+                    'wanglab/MedSAM2',
+                    filename,
+                    '--local-dir', local_dir,
+                    '--local-dir-use-symlinks', 'False'
+                ]
                 
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
                 downloaded_files.append(filename)
                 print(f"    ✓ {filename} downloaded")
-            except Exception as e:
+                
+            except subprocess.CalledProcessError as e:
                 print(f"    ✗ Failed to download {filename}: {e}")
+                if e.stderr:
+                    print(f"      Error: {e.stderr}")
         
         # Download additional files
         for filename in additional_files:
             print(f"  Downloading {filename}...")
             try:
-                # Try with local_dir first (newer versions)
-                try:
-                    file_path = hf_hub_download(
-                        repo_id="wanglab/MedSAM2",
-                        filename=filename,
-                        local_dir=local_dir,
-                        local_dir_use_symlinks=False
-                    )
-                except TypeError:
-                    # Fallback to cache_dir (older versions)
-                    print(f"    Using cache_dir for {filename}")
-                    file_path = hf_hub_download(
-                        repo_id="wanglab/MedSAM2",
-                        filename=filename,
-                        cache_dir=local_dir
-                    )
+                cmd = [
+                    'huggingface-cli', 'download',
+                    'wanglab/MedSAM2',
+                    filename,
+                    '--local-dir', local_dir,
+                    '--local-dir-use-symlinks', 'False'
+                ]
                 
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
                 downloaded_files.append(filename)
                 print(f"    ✓ {filename} downloaded")
-            except Exception as e:
+                
+            except subprocess.CalledProcessError as e:
                 print(f"    ✗ Failed to download {filename}: {e}")
+                if e.stderr:
+                    print(f"      Error: {e.stderr}")
         
         if downloaded_files:
             print(f"✓ MedSAM2 downloaded {len(downloaded_files)} files to: {local_dir}")
@@ -180,10 +159,11 @@ def verify_model_files(model_path, model_name, expected_files):
 def main():
     """Main installation function."""
     print("MedSAM2 and MedSAM ViT Installation Script")
+    print("Using huggingface-cli for reliable downloading")
     print("=" * 50)
     
-    # Check git-lfs
-    if not check_git_lfs():
+    # Check huggingface-cli
+    if not check_huggingface_cli():
         sys.exit(1)
     
     # Create base directory

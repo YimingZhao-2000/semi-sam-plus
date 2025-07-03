@@ -250,7 +250,7 @@ def get_medsam_vit_model(device='cuda', repo_path=None, skip_lfs=False):
             raise FileNotFoundError(f"MedSAM ViT model not found at {repo_path}. "
                                    "Please run the installation script first: python install_models.py")
         
-        # Verify model files exist
+        # Verify model files exist (check for huggingface-cli downloaded structure)
         required_files = ['config.json', 'pytorch_model.bin', 'tokenizer.json']
         missing_files = []
         for file in required_files:
@@ -259,16 +259,25 @@ def get_medsam_vit_model(device='cuda', repo_path=None, skip_lfs=False):
                 missing_files.append(file_path)
         
         if missing_files:
+            print(f"Missing files: {missing_files}")
+            print("This might be due to incomplete download. Please run:")
+            print("python install_models.py")
             raise FileNotFoundError(f"Missing MedSAM ViT model files: {missing_files}. "
-                                   "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
+                                   "Please run the installation script to download the complete model.")
         
         print(f"Loading MedSAM ViT from local path: {repo_path}")
         
         # Load model and processor from local path
-        processor = AutoProcessor.from_pretrained(repo_path)
-        model = AutoModelForMaskGeneration.from_pretrained(repo_path).to(device)
-        
-        return processor, model
+        try:
+            processor = AutoProcessor.from_pretrained(repo_path)
+            model = AutoModelForMaskGeneration.from_pretrained(repo_path).to(device)
+            print("✓ MedSAM ViT loaded successfully from local path")
+            return processor, model
+        except Exception as e:
+            print(f"Error loading from local path: {e}")
+            print("The model files might be corrupted. Please reinstall:")
+            print("python install_models.py")
+            raise
 
 def medsam_vit_inference(processor, model, image):
     """
@@ -349,8 +358,17 @@ def get_medsam2_model(device='cuda', repo_path=None, skip_lfs=False):
         ckpt_path = os.path.join(repo_path, 'MedSAM2_latest.pt')
         
         if not os.path.exists(ckpt_path):
+            print(f"MedSAM2 checkpoint not found at {ckpt_path}")
+            print("Available files in MedSAM2 directory:")
+            if os.path.exists(repo_path):
+                for file in os.listdir(repo_path):
+                    file_path = os.path.join(repo_path, file)
+                    if os.path.isfile(file_path):
+                        size = os.path.getsize(file_path)
+                        print(f"  - {file} ({size:,} bytes)")
+            
             raise FileNotFoundError(f"MedSAM2 checkpoint not found at {ckpt_path}. "
-                                   "If you used skip_lfs=True during installation, run 'git lfs pull' in the repository.")
+                                   "Please run the installation script to download the complete model.")
         
         print(f"Loading MedSAM2 from local path: {ckpt_path}")
         
@@ -368,6 +386,7 @@ def get_medsam2_model(device='cuda', repo_path=None, skip_lfs=False):
             model.to(device)
             model.eval()
             
+            print("✓ MedSAM2 loaded successfully from local path")
             return model
             
         except ImportError:

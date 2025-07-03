@@ -1,288 +1,140 @@
 #!/bin/bash
 
 # MedSAM2 and MedSAM ViT Installation Script
-# Updated to use correct huggingface_hub API
+# Updated to use huggingface-cli for reliable model downloading
 
 set -e  # Exit on any error
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+echo "MedSAM2 and MedSAM ViT Installation Script"
+echo "Using huggingface-cli for reliable downloading"
+echo "=================================================="
 
-# Print functions
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
+# Check if huggingface-cli is installed
+if ! command -v huggingface-cli &> /dev/null; then
+    echo "✗ huggingface-cli is not installed"
+    echo "Installing huggingface-cli..."
+    pip install huggingface_hub
+    echo "✓ huggingface-cli installed successfully"
+else
+    echo "✓ huggingface-cli is installed"
+fi
 
-print_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
+# Create base directory
+mkdir -p yiming_models_hgf
 
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
+# Download MedSAM ViT Base
+echo ""
+echo "Downloading MedSAM ViT Base..."
+MEDSAM_VIT_DIR="yiming_models_hgf/medsam-vit-base"
+mkdir -p "$MEDSAM_VIT_DIR"
 
-print_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
-}
+if huggingface-cli download wanglab/medsam-vit-base --local-dir "$MEDSAM_VIT_DIR" --local-dir-use-symlinks False; then
+    echo "✓ MedSAM ViT downloaded to: $MEDSAM_VIT_DIR"
+else
+    echo "✗ Failed to download MedSAM ViT"
+    exit 1
+fi
 
-check_git_lfs() {
-    print_info "Checking git-lfs installation..."
-    if command -v git-lfs &> /dev/null; then
-        print_success "git-lfs is installed"
-        return 0
-    else
-        print_error "git-lfs is not installed"
-        echo "Please install git-lfs first:"
-        echo "  Ubuntu/Debian: sudo apt-get install git-lfs"
-        echo "  CentOS/RHEL: sudo yum install git-lfs"
-        echo "  macOS: brew install git-lfs"
-        echo "Then run: git lfs install"
-        return 1
-    fi
-}
+# Download MedSAM2
+echo ""
+echo "Downloading MedSAM2..."
+MEDSAM2_DIR="yiming_models_hgf/MedSAM2"
+mkdir -p "$MEDSAM2_DIR"
 
-check_python_deps() {
-    print_info "Checking Python dependencies..."
-    
-    # Check if huggingface_hub is available
-    if python3 -c "import huggingface_hub" 2>/dev/null; then
-        print_success "huggingface_hub is available"
-    else
-        print_warning "huggingface_hub not found, installing..."
-        pip3 install huggingface_hub
-    fi
-}
+# List of MedSAM2 checkpoint files to download
+checkpoint_files=(
+    "MedSAM2_latest.pt"
+    "MedSAM2_2411.pt"
+    "MedSAM2_US_Heart.pt"
+    "MedSAM2_MRI_LiverLesion.pt"
+    "MedSAM2_CTLesion.pt"
+)
 
-download_medsam_vit() {
-    print_info "Downloading MedSAM ViT Base..."
-    
-    local_dir="yiming_models_hgf/medsam-vit-base"
-    
-    # Use Python script to download with version compatibility
-    python3 -c "
-import os
-import huggingface_hub
-from huggingface_hub import snapshot_download
+# Additional files
+additional_files=(
+    "README.md"
+    "config.json"
+)
 
-try:
-    hf_version = huggingface_hub.__version__
-    print(f'Using huggingface_hub version: {hf_version}')
-    
-    # Try with local_dir first (newer versions)
-    try:
-        downloaded_path = snapshot_download(
-            repo_id='wanglab/medsam-vit-base',
-            local_dir='$local_dir',
-            local_dir_use_symlinks=False
-        )
-    except TypeError:
-        # Fallback to cache_dir (older versions)
-        print('Using cache_dir for older huggingface_hub version')
-        downloaded_path = snapshot_download(
-            repo_id='wanglab/medsam-vit-base',
-            cache_dir='$local_dir'
-        )
-    
-    print(f'✓ MedSAM ViT downloaded to: {downloaded_path}')
-except Exception as e:
-    print(f'✗ Failed to download MedSAM ViT: {e}')
-    exit(1)
-"
-    
-    if [ $? -eq 0 ]; then
-        print_success "MedSAM ViT downloaded successfully"
-        return 0
-    else
-        print_error "Failed to download MedSAM ViT"
-        return 1
-    fi
-}
-
-download_medsam2() {
-    print_info "Downloading MedSAM2..."
-    
-    local_dir="yiming_models_hgf/MedSAM2"
-    mkdir -p "$local_dir"
-    
-    # Use Python script to download individual files with version compatibility
-    python3 -c "
-import os
-import huggingface_hub
-from huggingface_hub import hf_hub_download
-
-local_dir = '$local_dir'
-checkpoint_files = [
-    'MedSAM2_latest.pt',
-    'MedSAM2_2411.pt',
-    'MedSAM2_US_Heart.pt',
-    'MedSAM2_MRI_LiverLesion.pt',
-    'MedSAM2_CTLesion.pt'
-]
-additional_files = ['README.md', 'config.json']
-
-downloaded_count = 0
-hf_version = huggingface_hub.__version__
-print(f'Using huggingface_hub version: {hf_version}')
+downloaded_count=0
 
 # Download checkpoint files
-for filename in checkpoint_files:
-    try:
-        print(f'  Downloading {filename}...')
-        # Try with local_dir first (newer versions)
-        try:
-            file_path = hf_hub_download(
-                repo_id='wanglab/MedSAM2',
-                filename=filename,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False
-            )
-        except TypeError:
-            # Fallback to cache_dir (older versions)
-            print(f'    Using cache_dir for {filename}')
-            file_path = hf_hub_download(
-                repo_id='wanglab/MedSAM2',
-                filename=filename,
-                cache_dir=local_dir
-            )
-        
-        downloaded_count += 1
-        print(f'    ✓ {filename} downloaded')
-    except Exception as e:
-        print(f'    ✗ Failed to download {filename}: {e}')
+for filename in "${checkpoint_files[@]}"; do
+    echo "  Downloading $filename..."
+    if huggingface-cli download wanglab/MedSAM2 "$filename" --local-dir "$MEDSAM2_DIR" --local-dir-use-symlinks False; then
+        echo "    ✓ $filename downloaded"
+        ((downloaded_count++))
+    else
+        echo "    ✗ Failed to download $filename"
+    fi
+done
 
 # Download additional files
-for filename in additional_files:
-    try:
-        print(f'  Downloading {filename}...')
-        # Try with local_dir first (newer versions)
-        try:
-            file_path = hf_hub_download(
-                repo_id='wanglab/MedSAM2',
-                filename=filename,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False
-            )
-        except TypeError:
-            # Fallback to cache_dir (older versions)
-            print(f'    Using cache_dir for {filename}')
-            file_path = hf_hub_download(
-                repo_id='wanglab/MedSAM2',
-                filename=filename,
-                cache_dir=local_dir
-            )
-        
-        downloaded_count += 1
-        print(f'    ✓ {filename} downloaded')
-    except Exception as e:
-        print(f'    ✗ Failed to download {filename}: {e}')
-
-if downloaded_count > 0:
-    print(f'✓ MedSAM2 downloaded {downloaded_count} files to: {local_dir}')
-    exit(0)
-else:
-    print('✗ No MedSAM2 files were downloaded')
-    exit(1)
-"
-    
-    if [ $? -eq 0 ]; then
-        print_success "MedSAM2 downloaded successfully"
-        return 0
+for filename in "${additional_files[@]}"; do
+    echo "  Downloading $filename..."
+    if huggingface-cli download wanglab/MedSAM2 "$filename" --local-dir "$MEDSAM2_DIR" --local-dir-use-symlinks False; then
+        echo "    ✓ $filename downloaded"
+        ((downloaded_count++))
     else
-        print_error "Failed to download MedSAM2"
-        return 1
+        echo "    ✗ Failed to download $filename"
     fi
-}
+done
 
-verify_files() {
-    local model_path="$1"
-    local model_name="$2"
-    shift 2
-    local expected_files=("$@")
-    
-    print_info "Verifying $model_name files..."
-    
-    missing_files=()
-    for file in "${expected_files[@]}"; do
-        file_path="$model_path/$file"
-        if [ -f "$file_path" ]; then
-            file_size=$(stat -c%s "$file_path" 2>/dev/null || stat -f%z "$file_path" 2>/dev/null || echo "unknown")
-            print_success "$file ($file_size bytes)"
-        else
-            missing_files+=("$file")
-            print_error "$file missing"
-        fi
-    done
-    
-    if [ ${#missing_files[@]} -eq 0 ]; then
-        print_success "All $model_name files verified"
-        return 0
-    else
-        print_warning "Missing files for $model_name: ${missing_files[*]}"
-        return 1
-    fi
-}
+if [ $downloaded_count -gt 0 ]; then
+    echo "✓ MedSAM2 downloaded $downloaded_count files to: $MEDSAM2_DIR"
+else
+    echo "✗ No MedSAM2 files were downloaded"
+    exit 1
+fi
 
-main() {
-    echo "MedSAM2 and MedSAM ViT Installation Script"
-    echo "=================================================="
-    
-    # Check git-lfs
-    if ! check_git_lfs; then
-        exit 1
-    fi
-    
-    # Check Python dependencies
-    check_python_deps
-    
-    # Create base directory
-    mkdir -p yiming_models_hgf
-    
-    # Download models
-    installed_models=()
-    
-    # Download MedSAM ViT
-    if download_medsam_vit; then
-        installed_models+=("MedSAM ViT Base")
-        verify_files "yiming_models_hgf/medsam-vit-base" "MedSAM ViT Base" \
-            "config.json" "pytorch_model.bin" "tokenizer.json"
-    fi
-    
-    # Download MedSAM2
-    if download_medsam2; then
-        installed_models+=("MedSAM2")
-        verify_files "yiming_models_hgf/MedSAM2" "MedSAM2" \
-            "MedSAM2_latest.pt" "README.md"
-    fi
-    
-    # Summary
-    echo ""
-    echo "=================================================="
-    echo "INSTALLATION SUMMARY"
-    echo "=================================================="
-    echo "Base directory: $(pwd)/yiming_models_hgf"
-    
-    if [ ${#installed_models[@]} -eq 0 ]; then
-        print_warning "No models were successfully installed"
-        echo "Please check your internet connection and try again"
-        exit 1
-    fi
-    
-    for model in "${installed_models[@]}"; do
-        echo "$model: yiming_models_hgf/$model"
-    done
-    
-    echo ""
-    print_success "Installation complete! ${#installed_models[@]} model(s) installed"
-    echo ""
-    echo "Next steps:"
-    echo "1. Install dependencies: pip install transformers torch"
-    echo "2. Install MedSAM2 package: pip install git+https://github.com/bowang-lab/MedSAM2.git"
-    echo "3. Test setup: python test_model_loading.py"
-}
+# Verify files
+echo ""
+echo "Verifying downloaded files..."
 
-# Run main function
-main "$@" 
+# Verify MedSAM ViT files
+echo "MedSAM ViT files:"
+if [ -f "$MEDSAM_VIT_DIR/config.json" ]; then
+    size=$(stat -f%z "$MEDSAM_VIT_DIR/config.json" 2>/dev/null || stat -c%s "$MEDSAM_VIT_DIR/config.json" 2>/dev/null || echo "unknown")
+    echo "  ✓ config.json ($size bytes)"
+else
+    echo "  ✗ config.json missing"
+fi
+
+if [ -f "$MEDSAM_VIT_DIR/pytorch_model.bin" ]; then
+    size=$(stat -f%z "$MEDSAM_VIT_DIR/pytorch_model.bin" 2>/dev/null || stat -c%s "$MEDSAM_VIT_DIR/pytorch_model.bin" 2>/dev/null || echo "unknown")
+    echo "  ✓ pytorch_model.bin ($size bytes)"
+else
+    echo "  ✗ pytorch_model.bin missing"
+fi
+
+# Verify MedSAM2 files
+echo "MedSAM2 files:"
+if [ -f "$MEDSAM2_DIR/MedSAM2_latest.pt" ]; then
+    size=$(stat -f%z "$MEDSAM2_DIR/MedSAM2_latest.pt" 2>/dev/null || stat -c%s "$MEDSAM2_DIR/MedSAM2_latest.pt" 2>/dev/null || echo "unknown")
+    echo "  ✓ MedSAM2_latest.pt ($size bytes)"
+else
+    echo "  ✗ MedSAM2_latest.pt missing"
+fi
+
+if [ -f "$MEDSAM2_DIR/README.md" ]; then
+    size=$(stat -f%z "$MEDSAM2_DIR/README.md" 2>/dev/null || stat -c%s "$MEDSAM2_DIR/README.md" 2>/dev/null || echo "unknown")
+    echo "  ✓ README.md ($size bytes)"
+else
+    echo "  ✗ README.md missing"
+fi
+
+# Summary
+echo ""
+echo "=================================================="
+echo "INSTALLATION SUMMARY"
+echo "=================================================="
+echo "Base directory: $(pwd)/yiming_models_hgf"
+echo "MedSAM ViT Base: $MEDSAM_VIT_DIR"
+echo "MedSAM2: $MEDSAM2_DIR"
+echo ""
+echo "✓ Installation complete!"
+echo ""
+echo "Next steps:"
+echo "1. Install dependencies: pip install transformers torch"
+echo "2. Install MedSAM2 package: pip install git+https://github.com/bowang-lab/MedSAM2.git"
+echo "3. Test setup: python test_model_loading.py" 

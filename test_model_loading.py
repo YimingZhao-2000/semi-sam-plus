@@ -2,6 +2,7 @@
 """
 Test script to verify model loading functionality.
 This script checks if models can be loaded properly without downloading them.
+Updated for huggingface-cli installation method.
 """
 
 import os
@@ -23,14 +24,15 @@ def test_model_paths():
         for file in required_files:
             file_path = os.path.join(medsam_vit_path, file)
             if os.path.exists(file_path):
-                print(f"  ✓ {file} exists")
+                size = os.path.getsize(file_path)
+                print(f"  ✓ {file} exists ({size:,} bytes)")
             else:
                 missing_files.append(file)
                 print(f"  ✗ {file} missing")
         
         if missing_files:
             print(f"  ⚠️  Missing files: {missing_files}")
-            print("  Run: cd yiming_models_hgf/medsam-vit-base && git lfs pull")
+            print("  Run: python install_models.py")
         else:
             print("  ✓ All required files present")
     else:
@@ -55,19 +57,43 @@ def test_model_paths():
         for ckpt in checkpoint_files:
             ckpt_path = os.path.join(medsam2_path, ckpt)
             if os.path.exists(ckpt_path):
+                size = os.path.getsize(ckpt_path)
                 found_checkpoints.append(ckpt)
-                print(f"  ✓ {ckpt} exists")
+                print(f"  ✓ {ckpt} exists ({size:,} bytes)")
             else:
                 print(f"  ✗ {ckpt} missing")
         
+        # Check additional files
+        additional_files = ['README.md', 'config.json']
+        for file in additional_files:
+            file_path = os.path.join(medsam2_path, file)
+            if os.path.exists(file_path):
+                size = os.path.getsize(file_path)
+                print(f"  ✓ {file} exists ({size:,} bytes)")
+            else:
+                print(f"  ✗ {file} missing")
+        
         if not found_checkpoints:
             print("  ⚠️  No checkpoint files found")
-            print("  Run: cd yiming_models_hgf/MedSAM2 && git lfs pull")
+            print("  Run: python install_models.py")
         else:
             print(f"  ✓ Found {len(found_checkpoints)} checkpoint(s)")
     else:
         print(f"✗ MedSAM2 path missing: {medsam2_path}")
         print("  Run: python install_models.py")
+
+def test_huggingface_cli():
+    """Test if huggingface-cli is available."""
+    print("\nTesting huggingface-cli...")
+    
+    try:
+        import subprocess
+        result = subprocess.run(['huggingface-cli', '--version'], 
+                              capture_output=True, text=True, check=True)
+        print(f"✓ huggingface-cli available: {result.stdout.strip()}")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("✗ huggingface-cli not available")
+        print("  Run: pip install huggingface_hub")
 
 def test_model_imports():
     """Test if required packages can be imported."""
@@ -173,14 +199,16 @@ def test_pipeline_integration():
 def main():
     """Run all tests."""
     print("Semi-SAM+ Model Loading Test")
-    print("=" * 50)
+    print("Updated for huggingface-cli installation method")
+    print("=" * 60)
     
     test_model_paths()
+    test_huggingface_cli()
     test_model_imports()
     test_model_loading_functions()
     test_pipeline_integration()
     
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print("Test Summary:")
     print("- Check ✓ for working components")
     print("- Check ⚠️  for expected failures (missing models/packages)")
@@ -188,7 +216,7 @@ def main():
     print("\nTo fix issues:")
     print("1. Install models: python install_models.py")
     print("2. Install packages: pip install transformers medsam2")
-    print("3. Download LFS files: git lfs pull in model directories")
+    print("3. Install huggingface-cli: pip install huggingface_hub")
 
 if __name__ == "__main__":
     main() 
